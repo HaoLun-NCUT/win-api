@@ -123,7 +123,7 @@ function getContextSwitchRate(callback) {
 
 // 獲取正在運行的應用程式清單
 function getRunningApplications(callback) {
-  exec('powershell -command "Get-Process | Select-Object -Property Name, Id, CPU | Sort-Object -Property CPU -Descending | Format-Table -AutoSize"', (error, stdout) => {
+  exec('powershell -command "Get-Process | Select-Object -Property Name, Id, CPU | Sort-Object -Property CPU -Descending | Format-Table -AutoSize"', { encoding: 'utf8' }, (error, stdout) => {
     if (error) {
       console.error(`執行錯誤: ${error}`);
       callback(null);
@@ -131,12 +131,31 @@ function getRunningApplications(callback) {
     }
     
     const systemProcesses = ['System', 'Registry', 'smss', 'csrss', 'wininit', 'services', 'lsass', 'svchost', 'winlogon', 'explorer', 'spoolsv', 'taskhostw', 'dwm', 'fontdrvhost', 'sihost', 'ctfmon'];
-    const filteredOutput = stdout.split('\n').filter(line => {
+    const processLines = stdout.split('\n').filter(line => {
       const processName = line.trim().split(/\s+/)[0];
       return !systemProcesses.includes(processName);
-    }).join('\n');
+    });
+
+    const processMap = {};
+    processLines.forEach(line => {
+      const parts = line.trim().split(/\s+/);
+      const name = parts[0];
+      const cpu = parseFloat(parts[2]) || 0;
+
+      if (processMap[name]) {
+        processMap[name].cpu += cpu;
+      } else {
+        processMap[name] = { name, cpu };
+      }
+    });
+
+    const mergedOutput = Object.values(processMap)
+      .sort((a, b) => b.cpu - a.cpu)
+      .slice(0, 10)
+      .map(p => `${p.name.padEnd(20)}\t${p.cpu.toFixed(2)}`)
+      .join('\n');
     
-    callback(filteredOutput.trim());
+    callback(mergedOutput.trim());
   });
 }
 
